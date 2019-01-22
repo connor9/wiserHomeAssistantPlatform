@@ -19,25 +19,26 @@ from homeassistant.const import (
 
 _LOGGER = logging.getLogger(__name__)
 DOMAIN = "wiser"
-BATTERY_FULL =31
-
 
 
 def setup_platform(hass, config, add_devices, discovery_info=None):
     """Setup the sensor platform."""
     handler = hass.data[DOMAIN] # Get Handler
-    hubData = handler.getHubData()
     handler.update()
-    wiserDevices= []
-    # Process  general devices
-    for device in handler.getHubData().getDevices():
-        wiserDevices.append(WiserDevice(device.get('id'),handler,device.get("ProductType")))
 
-    wiserDevices.append(WiserSystemCircuitState(handler,"HEATING")   )
+    wiserDevices= []
+
+    # Process  general devices
+    for device in handler.getWiserHubManager().get_all_devices():
+        wiserDevices.append(WiserDevice(device.id, handler, device.product_type)) #wiserDevices.append(WiserDevice(device.get('id'),handler,device.get("ProductType")))
+
+    wiserDevices.append(WiserSystemCircuitState(handler,"HEATING"))
+
     # Dont display Hotwater if hotwater not supported
     # https://github.com/asantaga/wiserHomeAssistantPlatform/issues/8
-    if hubData.getHotwater()!=None:
-        wiserDevices.append(WiserSystemCircuitState(handler,"HOTWATER")   )
+    if handler.getWiserHubManager().has_hot_water():
+        wiserDevices.append(WiserSystemCircuitState(handler,"HOTWATER"))
+
     wiserDevices.append(WiserSystemCloudSensor(handler))
     wiserDevices.append(WiserSystemOperationModeSensor(handler))
 
@@ -72,7 +73,7 @@ class WiserDevice(Entity):
                 'VeryGood':'mdi:wifi-strength-4'
                 }
         try:
-            return iconList[self.handler.getHubData().getDevice(self.deviceId).get("DisplayedSignalStrength")]
+            return iconList[self.handler.getWiserHubManager().get_device(self.deviceId).displayed_signal_strength]
         except KeyError as ex:
             # Handle anything else as no signal
             return 'mdi:wifi-strength-alert-outline'
@@ -80,65 +81,70 @@ class WiserDevice(Entity):
     @property
     def name(self):
         #Return the name of the Device
-        productType=str(self.handler.getHubData().getDevice(self.deviceId).get("ProductType") or '')
-
-        if (productType=="Controller"):
-            return "Wiser Heathub"  # Only ever one of these
-        elif (productType=="iTRV"):
-            return "Wiser "+productType + "-"+ self.handler.getHubData().getDeviceRoom(self.deviceId)['roomName'] # Multiple ones get automagically number _n by HA
+        device = self.handler.getWiserHubManager().get_device(self.deviceId)
         
-        elif (productType=="RoomStat"):
-            return "Wiser "+productType + "-"+ self.handler.getHubData().getDeviceRoom(self.deviceId)['roomName'] # Usually only one per room
+        productType = type(device)
+
+        if (productType == "draytonwiser.device.Controller"):
+            return "Wiser Heathub"  # Only ever one of these
+        elif (productType =="draytonwiser.device.iTRV" or "draytonwiser.device.RoomStat"):
+            device_room_name = "Unknown"
+            if device.room_id is not None:
+                device_room = self.handler.getWiserHubManager().get_room(device.room_id)
+                device_room_name = device_room.name
+
+            return "Wiser " + device.product_type + "-" + device_room_name # Multiple ones get automagically number _n by HA
         else:
-            return "Wiser "+productType +"-"+ str(self.handler.getHubData().getDevice(self.deviceId).get("SerialNumber") or '')
+            return "Wiser "+ device.product_type + "-" + str(device.serial_number)
  
     @property
     def should_poll(self):
         """Return the polling state."""
         return True
 
-    #Assumption 31 = 100% battery
+    #Assumption 32 = 100% battery
     @property
     def battery_level(self):
-        return self.handler.getHubData().getDevice(self.deviceId).get("BatteryVoltage")/BATTERY_FULL*100
+        return self.handler.getWiserHubManager().get_device(self.deviceId).get_battery_percentage()
     
     @property
     def device_state_attributes(self):
         _LOGGER.debug('State attributes for {} {}'.format(self.deviceId,self.sensorType))
 
         attrs={}
-        deviceData=self.handler.getHubData().getDevice(self.deviceId)
+        device = self.handler.getWiserHubManager().get_device(self.deviceId)
         # Generic attributes
         attrs['vendor'] = "Drayton Wiser"
-        attrs['product_type']=deviceData.get("ProductType")
-        attrs['model_identifier'] = deviceData.get("ModelIdentifier")
-        attrs['device_lock_enabled'] = deviceData.get("DeviceLockEnabled")
-        attrs['displayed_signal_strength'] = deviceData.get("DisplayedSignalStrength")
-        attrs['firmware'] = deviceData.get("ActiveFirmwareVersion")
+        attrs['product_type']= device.product_type
+        attrs['model_identifier'] = device.model_identifier
+        attrs['device_lock_enabled'] = device.device_lock_enabled
+        attrs['displayed_signal_strength'] = device.displayed_signal_strength
+        attrs['firmware'] = device.active_firmware_version
 
-        if deviceData.get("ReceptionOfDevice")!=None:
-            attrs['device_reception_RSSI'] = deviceData.get("ReceptionOfDevice").get("Rssi")
-            attrs['device_reception_LQI'] = deviceData.get("ReceptionOfDevice").get("Lqi")
+        # if device.reception_of_device != None:
+        #     attrs['device_reception_RSSI'] = device.rReception_of_device["Rssi"]
+        #     attrs['device_reception_LQI'] = device.rReception_of_device["Lqi"]
             
-        
-        if deviceData.get("ReceptionOfController")!=None:
-            attrs['controller_reception_RSSI'] = deviceData.get("ReceptionOfController").get("Rssi")
-            attrs['device_reception_LQI'] = deviceData.get("ReceptionOfController").get("Lqi")
+        # if deviceData.get("ReceptionOfController")!=None:
+        #     attrs['controller_reception_RSSI'] = deviceData.get("ReceptionOfController").get("Rssi")
+        #     attrs['device_reception_LQI'] = deviceData.get("ReceptionOfController").get("Lqi")
             
         if self.sensorType in ['RoomStat','iTRV','SmartPlug']:
-            attrs['battery_voltage']=deviceData.get("BatteryVoltage")
-            attrs['battery_level']=deviceData.get("BatteryLevel")
-            attrs['serial_number']=deviceData.get("SerialNumber")
+            attrs['battery_voltage']=device.battery_voltage
+            attrs['battery_level']=device.battery_level
+            attrs['serial_number']=device.serial_number
 
         if self.sensorType=='RoomStat':
-            attrs['humidity']=self.handler.getHubData().getRoomStatData(self.deviceId).get('MeasuredHumidity')
+            attrs['humidity']=device.measurement.measured_humidity
+
         return attrs
     @property
     def state(self):
         _LOGGER.debug('**********************************')
         _LOGGER.debug('Wiser Device state requested deviceId : %s',self.deviceId)
         _LOGGER.debug('**********************************')
-        return self.handler.getHubData().getDevice(self.deviceId).get("DisplayedSignalStrength")
+
+        return self.handler.getWiserHubManager().get_device(self.deviceId).displayed_signal_strength
         
 
 """ 
@@ -150,8 +156,8 @@ class WiserSystemCircuitState(Entity):
             
         """Initialize the sensor."""
         _LOGGER.info('Wiser Circuit Sensor Init')
-        self.handler=handler
-        self.circuitType=circuitType
+        self.handler = handler
+        self.circuitType = circuitType
 
     def update(self):
         _LOGGER.debug('**********************************')
@@ -190,11 +196,11 @@ class WiserSystemCircuitState(Entity):
         """ returns additional info"""
         attrs={}
         if self.circuitType=="HEATING":
-           heatingChannels= self.handler.getHubData().getHeatingChannels()
+           heatingChannels= self.handler.getWiserHubManager().get_all_heating_channels()
            for heatingChannel in heatingChannels:
-               channelName=heatingChannel.get("Name")
-               channelPctDmd=heatingChannel.get("PercentageDemand")
-               channelRoomIds=heatingChannel.get("RoomIds")
+               channelName=heatingChannel.name
+               channelPctDmd=heatingChannel.percentage_demand
+               channelRoomIds=heatingChannel.room_ids
                attrName="percentage_demand_{}".format(channelName)
                attrs[attrName]=channelPctDmd
                attrName2="room_ids_{}".format(channelName)
@@ -208,9 +214,9 @@ class WiserSystemCircuitState(Entity):
         _LOGGER.debug('Wiser Cloud Circut STATE requested')
         _LOGGER.debug('**********************************')
         if self.circuitType=="HEATING":
-            return self.handler.getHubData().getHeatingRelayStatus()
+            return self.handler.getWiserHubManager().get_heating_relay_state()
         else:
-            return self.handler.getHubData().getHotwaterRelayStatus()        
+            return self.handler.getWiserHubManager().get_hotwater_relay_state()        
   
 
 """
@@ -222,12 +228,12 @@ class WiserSystemCloudSensor(Entity):
         """Initialize the sensor."""
         _LOGGER.info('Wiser Cloud Sensor Init')
         self.handler=handler
-        self.cloudStatus=self.handler.getHubData().getSystem().get("CloudConnectionStatus")
+        self.cloudStatus=self.handler.getWiserHubManager().get_system().cloud_connection_status
       
     def update(self):
         _LOGGER.debug('Wiser Cloud Sensor Update requested')
         self.handler.update()
-        self.cloudStatus=self.handler.getHubData().getSystem().get("CloudConnectionStatus")
+        self.cloudStatus=self.handler.getWiserHubManager().get_system().cloud_connection_status
 
     @property
     def icon(self):
@@ -261,14 +267,14 @@ class WiserSystemOperationModeSensor(Entity):
         """Initialize the sensor."""
         _LOGGER.info('Wiser Operation  Mode Sensor Init')
         self.handler=handler
-        self.overrideType=self.handler.getHubData().getSystem().get("OverrideType")
-        self.awayTemperature=self.handler.getHubData().getSystem().get("AwayModeSetPointLimit")
+        self.overrideType=self.handler.getWiserHubManager().get_system().override_type
+        self.awayTemperature=self.handler.getWiserHubManager().get_system().away_mode_set_point_limit
       
     def update(self):
         _LOGGER.debug('Wiser Operation Mode Sensor Update requested')
         self.handler.update()
-        self.overrideType=self.handler.getHubData().getSystem().get("OverrideType")
-        self.awayTemperature=self.handler.getHubData().getSystem().get("AwayModeSetPointLimit")
+        self.overrideType=self.handler.getWiserHubManager().get_system().override_type
+        self.awayTemperature=self.handler.getWiserHubManager().get_system().away_mode_set_point_limit
 
     def mode(self):
         if self.overrideType and self.overrideType == "Away":

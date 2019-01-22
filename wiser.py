@@ -18,6 +18,8 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.discovery import load_platform
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_SCAN_INTERVAL,CONF_MINIMUM
 
+# TODO: Submit drayton wiser library to PyPi and include reference.
+from .draytonwiser import Manager
 
 # TODO : Once the core library is added to PyPi will modify this
 #REQUIREMENTS = ['package name'']
@@ -45,7 +47,7 @@ def setup(hass, config):
     minimum_temp= config[DOMAIN][0][CONF_MINIMUM]
 
     _LOGGER.info("Wiser setup with HubIp =  {}".format(hubHost))
-    hass.data[DATA_KEY] = WiserHubHandle(hubHost, password, scan_interval,minimum_temp)
+    hass.data[DATA_KEY] = WiserHubHandle(hubHost, password, scan_interval, minimum_temp)
 
     _LOGGER.info("Wiser Component Setup Completed")
 
@@ -63,33 +65,35 @@ class WiserHubHandle:
         self.scan_interval = scan_interval
         self.ip = ip
         self.secret = secret
-        self.wiserHubInstance=None
+        self.wiserHubManager=None
         self.mutex = Lock()
         self.minimum_temp=minimum_temp
         self._updatets = time.time()
         _LOGGER.info("min temp = {}".format(self.minimum_temp))
 
-    def getHubData(self):
-        from .wiserAPI import wiserHub
-        if (self.wiserHubInstance==None):
-            self.wiserHubInstance=wiserHub.wiserHub(self.ip,self.secret)
-        return self.wiserHubInstance
+    def getWiserHubManager(self):
+        
+        if (self.wiserHubManager==None):
+            self.wiserHubManager = Manager(wiser_hub_ip=self.ip, api_secret=self.secret)
+
+        return self.wiserHubManager
 
     def getMinimumTemp(self):
         return self.minimum_temp
 
     def update(self):
         _LOGGER.info("Update Requested")
-        from .wiserAPI import wiserHub
-        if (self.wiserHubInstance==None):
-            self.wiserHubInstance=wiserHub.wiserHub(self.ip,self.secret)
+        
+        if (self.wiserHubManager == None):
+            self.wiserHubManager = Manager(wiser_hub_ip=self.ip, api_secret=self.secret)
         with self.mutex:
             if (time.time() - self._updatets) >= self.scan_interval:
                 _LOGGER.debug("*********************************************************************")
                 _LOGGER.info("Scan Interval exceeeded, updating Wiser DataSet from hub")
                 _LOGGER.debug("*********************************************************************")
                 try:
-                    self.wiserHubInstance.refreshData()
+                    self.wiserHubManager.get_data("")
+                    # self.wiserHubInstance.refreshData()
                 except timeout as timeoutex:
                     _LOGGER.error("Timed out whilst connecting to {}, with error {}".format(self.ip,str(timeoutex)))
                     hass.components.persistent_notification.create("Error: {}<br /> You will need to restart Home Assistant after fixing.".format(ex), title=NOTIFICATION_TITLE, notification_id=NOTIFICATION_ID)
