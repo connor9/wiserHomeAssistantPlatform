@@ -19,10 +19,10 @@ from homeassistant.helpers.discovery import load_platform
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_SCAN_INTERVAL,CONF_MINIMUM
 
 # TODO: Submit drayton wiser library to PyPi and include reference.
-from .draytonwiser import Manager
+#rom .draytonwiser import Manager
+REQUIREMENTS = ['python-draytonwiser-api']
 
-# TODO : Once the core library is added to PyPi will modify this
-#REQUIREMENTS = ['package name'']
+from draytonwiser import Manager
 
 _LOGGER = logging.getLogger(__name__)
 NOTIFICATION_ID = 'wiser_notification'
