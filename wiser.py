@@ -19,9 +19,9 @@ from homeassistant.helpers.discovery import load_platform
 from homeassistant.const import CONF_HOST, CONF_PASSWORD, CONF_SCAN_INTERVAL,CONF_MINIMUM
 
 # TODO: Submit drayton wiser library to PyPi and include reference.
-#rom .draytonwiser import Manager
-REQUIREMENTS = ['python-draytonwiser-api']
+#from .draytonwiser import Manager
 
+REQUIREMENTS = ['python-draytonwiser-api==1.0.1']
 from draytonwiser import Manager
 
 _LOGGER = logging.getLogger(__name__)
@@ -35,8 +35,7 @@ PLATFORM_SCHEMA = vol.Schema({
     vol.Required(CONF_HOST): cv.string,
     vol.Optional(CONF_PASSWORD): cv.string,
     vol.Optional(CONF_SCAN_INTERVAL, default=300): cv.time_period,
-    vol.Optional(CONF_MINIMUM, default=-5): vol.All(vol.Coerce(int))
-    
+    vol.Optional(CONF_MINIMUM, default=-5): vol.All(vol.Coerce(int))  
 })
 
 
@@ -74,6 +73,7 @@ class WiserHubHandle:
     def getWiserHubManager(self):
         
         if (self.wiserHubManager==None):
+            _LOGGER.warning("Creating new WiserBaseAPI hub Manager.")
             self.wiserHubManager = Manager(wiser_hub_ip=self.ip, api_secret=self.secret)
 
         return self.wiserHubManager
@@ -85,6 +85,7 @@ class WiserHubHandle:
         _LOGGER.info("Update Requested")
         
         if (self.wiserHubManager == None):
+            _LOGGER.warning("Creating new WiserBaseAPI hub Manager from update")
             self.wiserHubManager = Manager(wiser_hub_ip=self.ip, api_secret=self.secret)
         with self.mutex:
             if (time.time() - self._updatets) >= self.scan_interval:
@@ -92,7 +93,8 @@ class WiserHubHandle:
                 _LOGGER.info("Scan Interval exceeeded, updating Wiser DataSet from hub")
                 _LOGGER.debug("*********************************************************************")
                 try:
-                    self.wiserHubManager.get_data("")
+                    _LOGGER.info("Try get_data from update")
+                    self.wiserHubManager.get_data(item="", params={'refresh':True})
                     # self.wiserHubInstance.refreshData()
                 except timeout as timeoutex:
                     _LOGGER.error("Timed out whilst connecting to {}, with error {}".format(self.ip,str(timeoutex)))

@@ -34,6 +34,7 @@ def setup_platform(hass, config, add_devices, discovery_info=None):
     wiserRooms = []
 
     # Get Rooms
+    _LOGGER.info('setup_platform')
     for room in handler.getWiserHubManager().get_all_rooms(): #for room in handler.getHubData().getRooms():
         wiserRooms.append(WiserRoom(room.id, handler))
 
@@ -68,7 +69,7 @@ class WiserRoom(ClimateDevice):
     @property
     def name(self):
         """Return the name of the Climate device."""
-
+        _LOGGER.info('Name requested for room %s',self.roomId)
         return "Wiser " + self.handler.getWiserHubManager().get_room(self.roomId).name
 
     @property
@@ -77,6 +78,7 @@ class WiserRoom(ClimateDevice):
 
     @property
     def current_temperature(self):
+        _LOGGER.info('current_temperature requested for room %s',self.roomId)
         temp = self.handler.getWiserHubManager().get_room(self.roomId).get_current_temperature()
         if temp is not None and temp < self.handler.getMinimumTemp():
             # Sometimes we get really low temps (like -3000!), not sure why, if we do then just set it to -20 for now till i debug this.
@@ -89,11 +91,14 @@ class WiserRoom(ClimateDevice):
 
     @property
     def current_operation(self):
+        _LOGGER.info('current_operation requested for room %s',self.roomId)
         return self.handler.getWiserHubManager().get_room(self.roomId).mode
 
     @property
     def target_temperature(self):
-          return self.handler.getWiserHubManager().get_room(self.roomId).get_current_set_point()
+        _LOGGER.info('target_temperature requested for room %s',self.roomId)
+        
+        return self.handler.getWiserHubManager().get_room(self.roomId).get_current_set_point()
 
    
     def update(self):
